@@ -9,6 +9,10 @@ jobs:
         run: git clone http://host.docker.internal:3000/jcl/tea.git .
       - name: 安装依赖
         run: |
+          python3 -m venv .venv
+          . .venv/bin/activate
           pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
       - name: 运行测试
-        run: python -m pytest
+        run: |
+          . .venv/bin/activate
+          python -m pytest
