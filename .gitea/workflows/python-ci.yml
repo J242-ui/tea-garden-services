@@ -6,7 +6,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 拉取代码
-        run: git clone http://gitea:3000/jcl/tea.git .
+        run: git clone http://host.docker.internal:3000/jcl/tea.git .
       - name: 安装依赖
         run: |
           pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
