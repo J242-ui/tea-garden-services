@@ -1,0 +1,59 @@
+{
+  "gardens": [
+    {
+      "id": "longjing",
+      "name": "西湖龙井茶园",
+      "location": "浙江省杭州市西湖区",
+      "location_id": "101210101",
+      "lon": 120.1,
+      "lat": 30.25,
+      "altitude_m": 50,
+      "variety": "龙井43",
+      "notes": "明前茶产区，春季易受倒春寒影响"
+    },
+    {
+      "id": "biluochun",
+      "name": "洞庭碧螺春茶园",
+      "location": "江苏省苏州市吴中区",
+      "location_id": "101190401",
+      "lon": 120.41,
+      "lat": 31.1,
+      "altitude_m": 100,
+      "variety": "碧螺春",
+      "notes": "太湖周边，湿度大，需关注霉雨期病害"
+    },
+    {
+      "id": "wuyishan",
+      "name": "武夷岩茶茶园",
+      "location": "福建省南平市武夷山市",
+      "location_id": "101230501",
+      "lon": 118.04,
+      "lat": 27.76,
+      "altitude_m": 350,
+      "variety": "水仙/肉桂",
+      "notes": "丹霞地貌，昼夜温差大"
+    },
+    {
+      "id": "anxi",
+      "name": "安溪铁观音茶园",
+      "location": "福建省泉州市安溪县",
+      "location_id": "101230601",
+      "lon": 118.19,
+      "lat": 25.06,
+      "altitude_m": 200,
+      "variety": "铁观音",
+      "notes": "高山云雾区，需关注干旱与高温"
+    },
+    {
+      "id": "xinyang",
+      "name": "信阳毛尖茶园",
+      "location": "河南省信阳市浉河区",
+      "location_id": "101180601",
+      "lon": 114.06,
+      "lat": 32.13,
+      "altitude_m": 150,
+      "variety": "信阳毛尖",
+      "notes": "北方茶区，冬季低温冻害风险高"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# 环境变量与密钥
+.env
+.env.local
+
+# Streamlit
+.streamlit/secrets.toml
+
+# 测试与缓存
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE / 系统
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# 运行日志
+*.log
