@@ -1,4 +1,4 @@
-# Python
+
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -6,27 +6,25 @@ __pycache__/
 venv/
 env/
 
-# 环境变量与密钥（禁止提交真实密钥，只提交 env.example 模板）
+
 .env
 .env.local
 .streamlit/secrets.toml
 
-# 测试与缓存
+
 .pytest_cache/
 .coverage
 htmlcov/
 
-# IDE / 系统
+
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
 
-# 旧的忽略清单草稿（已并入本文件）
+
 gitignore.txt
 
-# 运行日志
 *.log
 
-# 数据与模型：保留训练好的模型文件随仓库一起提交，
-# 让其他人拉取后可直接使用（data/models/*.joblib 不忽略）。
+
