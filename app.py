@@ -23,6 +23,7 @@ ui.inject_css()
 try:
     from src import db
     db.init_db()
+    db.init_db_ext()  # 新增：历史气象表 + 风险反馈表
 except Exception:
     pass
 
@@ -40,6 +41,13 @@ st.caption(garden.get("notes", ""))
 
 if data is None:
     st.stop()
+
+# 三引擎数据打底：归档今日预报 + 确保历史数据 + 懒加载/训练模型
+try:
+    from src import ensemble
+    ensemble.prepare(garden, data)
+except Exception:
+    pass
 
 now = data["now"]["now"]
 daily = data["daily"]["daily"]

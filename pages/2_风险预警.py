@@ -30,6 +30,59 @@ overall = engine.assess_all(now, daily)
 
 ui.overall_risk_banner(overall)
 
+# ===== 智能融合研判（ML 分类 + 时序 + Bandit 择优）=====
+from src import ensemble
+_ens = None
+_st_ens = None
+try:
+    _st_ens = ensemble.prepare(garden, data)
+    _ens = ensemble.run_ensemble(garden, now, daily, data.get("air"))
+    ensemble.set_last_arm(garden, _ens["recommended_action"]["arm"])
+except Exception as _e_ens:
+    _ens = None
+
+if _ens is not None:
+    with st.expander("🧠 智能融合研判（ML 分类 + 时序 + Bandit 择优）", expanded=True):
+        st.caption(
+            f"引擎状态：ML分类{'✅就绪' if _st_ens['ml_ready'] else '⏳待数据积累后自动训练'} · "
+            f"历史数据 {_st_ens['history_days']} 天 · Bandit 已学习 {_st_ens['bandit_updates']} 次反馈"
+        )
+        _lv = _ens["overall_level"]
+        _c = ui.LEVEL_COLOR[_lv]
+        _p = _ens["proba"]
+        st.markdown(
+            f"**融合风险等级：** <span class='risk-badge' style='background:{_c}'>{ui.LEVEL_CN[_lv]}</span>",
+            unsafe_allow_html=True,
+        )
+        st.caption(f"模型概率：低 {_p['low']:.0%} · 中 {_p['medium']:.0%} · 高 {_p['high']:.0%}")
+        st.markdown("**未来 7 天 ML 逐日风险预测**")
+        _days = " ｜ ".join(
+            f"{d['fxDate'][5:]}{ui.LEVEL_CN[d['level']]}" for d in _ens["ml"]["per_day"]
+        )
+        st.write(_days if _ens["ml"]["per_day"] else "（暂无预报数据）")
+        _tw = _ens["ts"]["window"]
+        if _tw.get("n"):
+            st.caption(
+                f"时序窗口(近{_tw['n']}天)：均温 {_tw['temp_max_mean']}°C · 高温 {_tw['hot_days']} 天 · "
+                f"降水累计 {_tw['precip_sum']}mm · 温度趋势 {_tw['temp_trend']}"
+            )
+        if _ens["ts"]["forecast"]:
+            _f = _ens["ts"]["forecast"]
+            st.caption(f"时序预测(未来{len(_f['temp_max'])}天最高温)：{' / '.join(map(str, _f['temp_max']))}°C")
+        _act = _ens["recommended_action"]
+        st.markdown(f"**🤖 Bandit 智能推荐处置：`{_act['arm']}`**")
+        st.info(_act["advice"])
+        c_fb1, c_fb2 = st.columns(2)
+        if c_fb1.button("✅ 已按建议处置", key="fb_act"):
+            ensemble.record_feedback(garden, now, _ens["proba"], _lv, adopted=True, detail="已处置")
+            st.success("已记录反馈，Bandit 将据此优化后续推荐")
+            st.rerun()
+        if c_fb2.button("😌 风险未发生 / 已解除", key="fb_low"):
+            ensemble.record_feedback(garden, now, _ens["proba"], _lv, actual_level="low", detail="风险未发生")
+            st.success("已记录反馈（成真=低风险），用于评估推荐有效性")
+            st.rerun()
+
+
 # 当前整园预警档位
 tier = overall_tier(overall)
 meta = TIER_META[tier]

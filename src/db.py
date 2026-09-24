@@ -337,3 +337,171 @@ def delete_analysis_record(rid: int, user_id: int) -> None:
         conn.commit()
     finally:
         conn.close()
+
+
+# ===========================================================================
+# 三引擎联动 · 数据打底层（阶段 0）
+# ---------------------------------------------------------------------------
+# weather_history : 茶园逐日气象归档（供时序特征与 ML 训练用）
+# risk_feedback   : 风险推送后的反馈（是否采纳 / 风险是否成真），供闭环重训与 bandit 更新
+# ===========================================================================
+
+def _extend_schema() -> None:
+    """幂等追加新表（历史气象 + 风险反馈）。"""
+    extra = """
+CREATE TABLE IF NOT EXISTS weather_history (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    garden_key VARCHAR(64) NOT NULL,
+    obs_date   DATE        NOT NULL,
+    temp_max   DOUBLE DEFAULT NULL,
+    temp_min   DOUBLE DEFAULT NULL,
+    humidity   DOUBLE DEFAULT NULL,
+    precip     DOUBLE DEFAULT NULL,
+    wind_scale DOUBLE DEFAULT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_garden_date (garden_key, obs_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS risk_feedback (
+    id             INT AUTO_INCREMENT PRIMARY KEY,
+    user_id        INT          DEFAULT NULL,
+    garden_key     VARCHAR(64)  NOT NULL,
+    kind           VARCHAR(16)  NOT NULL,
+    risk_name      VARCHAR(64)  DEFAULT NULL,
+    predicted_level VARCHAR(16) NOT NULL,
+    actual_level   VARCHAR(16)  DEFAULT NULL,
+    adopted        TINYINT      DEFAULT 0,
+    detail         VARCHAR(600) DEFAULT NULL,
+    created_at     DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_fb_garden (garden_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+"""
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            for stmt in extra.split(';'):
+                stmt = stmt.strip()
+                if stmt:
+                    cur.execute(stmt)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def init_db_ext() -> None:
+    """调用方在启动时调用，确保新表存在。"""
+    try:
+        _extend_schema()
+    except Exception:  # noqa: BLE001 - 数据库不可用时静默，游客演示不受影响
+        pass
+
+
+# ----------------------------------------------------------------
+# 气象归档
+# ----------------------------------------------------------------
+def archive_weather(garden_key: str, daily: list[dict]) -> None:
+    """把某茶园当天的预报（或历史）写入 weather_history，按 (garden_key,date) 去重 UPSERT。"""
+    if not daily:
+        return
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            for d in daily:
+                cur.execute(
+                    "INSERT INTO weather_history (garden_key,obs_date,temp_max,temp_min,humidity,precip,wind_scale) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s) "
+                    "ON DUPLICATE KEY UPDATE temp_max=VALUES(temp_max),temp_min=VALUES(temp_min),"
+                    "humidity=VALUES(humidity),precip=VALUES(precip),wind_scale=VALUES(wind_scale)",
+                    (
+                        garden_key,
+                        d.get("fxDate"),
+                        float(d.get("tempMax") or 0),
+                        float(d.get("tempMin") or 0),
+                        float(d.get("humidity") or 0),
+                        float(d.get("precip") or 0),
+                        float(d.get("windScaleDay") or 0),
+                    ),
+                )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def weather_history_series(garden_key: str, days: int = 90) -> list[dict]:
+    """返回该茶园最近 days 天的历史气象记录（按日期升序）。"""
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT obs_date,temp_max,temp_min,humidity,precip,wind_scale "
+                "FROM weather_history WHERE garden_key=%s ORDER BY obs_date DESC LIMIT %s",
+                (garden_key, days),
+            )
+            rows = [dict(r) for r in cur.fetchall()]
+        rows.reverse()
+        return rows
+    finally:
+        conn.close()
+
+
+def weather_history_count(garden_key: str) -> int:
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS n FROM weather_history WHERE garden_key=%s", (garden_key,))
+            return int(cur.fetchone()["n"])
+    finally:
+        conn.close()
+
+
+# ----------------------------------------------------------------
+# 风险反馈
+# ----------------------------------------------------------------
+def log_risk_feedback(garden_key: str, kind: str, predicted_level: str,
+                      risk_name: str | None = None, actual_level: str | None = None,
+                      adopted: bool = False, detail: str | None = None,
+                      user_id: int | None = None) -> None:
+    """记录一次风险推送的反馈。adopted=农户是否采纳建议，actual_level=事后是否成真。"""
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO risk_feedback (user_id,garden_key,kind,risk_name,predicted_level,"
+                "actual_level,adopted,detail) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                (user_id, garden_key, kind, risk_name, predicted_level, actual_level,
+                 int(bool(adopted)), detail),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def risk_feedback_stats(garden_key: str, kind: str | None = None) -> dict:
+    """按推送等级统计反馈（采纳数/成真数），用于 bandit 计算 reward 的样本。"""
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            if kind:
+                cur.execute(
+                    "SELECT predicted_level, COUNT(*) AS n, SUM(adopted) AS adopted, "
+                    "SUM(actual_level IS NOT NULL) AS labeled "
+                    "FROM risk_feedback WHERE garden_key=%s AND kind=%s GROUP BY predicted_level",
+                    (garden_key, kind),
+                )
+            else:
+                cur.execute(
+                    "SELECT predicted_level, COUNT(*) AS n, SUM(adopted) AS adopted, "
+                    "SUM(actual_level IS NOT NULL) AS labeled "
+                    "FROM risk_feedback WHERE garden_key=%s GROUP BY predicted_level",
+                    (garden_key,),
+                )
+            return {
+                r["predicted_level"]: {
+                    "n": int(r["n"]),
+                    "adopted": int(r["adopted"] or 0),
+                    "labeled": int(r["labeled"] or 0),
+                }
+                for r in cur.fetchall()
+            }
+    finally:
+        conn.close()

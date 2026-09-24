@@ -45,6 +45,40 @@ cards = build_routine_cards(garden, data["now"], daily, data["air"], overall)
 cats = st.session_state["farm_cats"]
 filtered = [c for c in cards if cats.get(c.get("cat"), True)]
 
+# ===== Bandit 智能推送推荐（在线择优置顶）=====
+from src import ensemble
+_ens_f = None
+try:
+    ensemble.prepare(garden, data)
+    _ens_f = ensemble.run_ensemble(garden, now, daily, data.get("air"))
+    ensemble.set_last_arm(garden, _ens_f["recommended_action"]["arm"])
+except Exception:
+    _ens_f = None
+
+if _ens_f is not None:
+    _act = _ens_f["recommended_action"]
+    _lv = _ens_f["overall_level"]
+    _c = ui.LEVEL_COLOR[_lv]
+    with st.container(border=True):
+        st.markdown(
+            f"<span class='garden-title'>🤖 今日智能推荐</span> "
+            f"<span class='risk-badge' style='background:{_c}'>融合风险 {ui.LEVEL_CN[_lv]}</span>",
+            unsafe_allow_html=True,
+        )
+        st.write(f"**{_act['arm']}** —— " + _act["advice"])
+        st.caption("由「ML 分类 + 时序 + Contextual Bandit」三引擎融合择优，随反馈持续优化。")
+        _f1, _f2 = st.columns(2)
+        if _f1.button("👍 采纳这条建议", key="farm_fb_ok"):
+            ensemble.record_feedback(garden, now, _ens_f["proba"], _lv,
+                                     kind="farm", adopted=True, detail="采纳智能推荐")
+            st.success("已记录采纳，感谢反馈")
+            st.rerun()
+        if _f2.button("👎 不采纳", key="farm_fb_no"):
+            ensemble.record_feedback(garden, now, _ens_f["proba"], _lv,
+                                     kind="farm", adopted=False, detail="未采纳")
+            st.success("已记录，将减少此类推荐")
+            st.rerun()
+
 # ---------- 摘要 ----------
 summary = summarize(filtered)
 col1, col2, col3 = st.columns(3)
