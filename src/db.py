@@ -1,7 +1,7 @@
 ﻿"""MySQL 数据访问层：用户、用户茶园、推送记录。
 
 连接参数从 .env 读取（DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME），
-未配置时默认本机 root/1006 连 tea_garden 库。
+未配置时默认本机 root（空密码）连 tea_garden 库；生产环境务必在 .env 中显式配置 DB_PASSWORD。
 """
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import secrets
+import time
 from datetime import datetime
 from typing import Any, Iterable
 
@@ -144,17 +145,54 @@ def register(username: str, password: str, nickname: str | None = None) -> tuple
         conn.close()
 
 
+# ----------------------------------------------------------------
+# 登录限流（进程内）：连续失败达到上限后临时锁定，防暴力破解
+# ----------------------------------------------------------------
+_LOGIN_FAILURES: dict[str, list[float]] = {}  # username -> 失败时间戳
+_LOGIN_MAX_FAIL = 5          # 窗口内最多允许失败次数
+_LOGIN_WINDOW = 900          # 窗口时长（秒）= 15 分钟
+
+
+def _record_login_failure(username: str) -> None:
+    _LOGIN_FAILURES.setdefault(username, []).append(time.time())
+
+
+def _is_login_locked(username: str) -> bool:
+    now = time.time()
+    ts = [t for t in _LOGIN_FAILURES.get(username, []) if now - t < _LOGIN_WINDOW]
+    _LOGIN_FAILURES[username] = ts
+    return len(ts) >= _LOGIN_MAX_FAIL
+
+
+def login_remaining_lock(username: str) -> int | None:
+    """返回该用户名距离锁定还剩几次失败机会；已锁定返回 None。"""
+    now = time.time()
+    ts = [t for t in _LOGIN_FAILURES.get(username, []) if now - t < _LOGIN_WINDOW]
+    if len(ts) >= _LOGIN_MAX_FAIL:
+        return None
+    return _LOGIN_MAX_FAIL - len(ts)
+
+
 def verify_login(username: str, password: str) -> dict | None:
-    """校验登录。成功返回用户 dict，失败返回 None。"""
+    """校验登录。成功返回用户 dict，失败返回 None（失败次数过多会临时锁定）。"""
+    uname = (username or "").strip()
+    if _is_login_locked(uname):
+        return None
     conn = connect()
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT * FROM users WHERE username=%s", (username.strip(),))
+            cur.execute("SELECT * FROM users WHERE username=%s", (uname,))
             row = cur.fetchone()
             if not row:
+                _record_login_failure(uname)
                 return None
             h = _hash_password(password, row["salt"])
-            return dict(row) if h == row["password_hash"] else None
+            if h != row["password_hash"]:
+                _record_login_failure(uname)
+                return None
+            # 登录成功：清零该用户名的失败记录
+            _LOGIN_FAILURES.pop(uname, None)
+            return dict(row)
     finally:
         conn.close()
 
@@ -375,6 +413,21 @@ CREATE TABLE IF NOT EXISTS risk_feedback (
     created_at     DATETIME     DEFAULT CURRENT_TIMESTAMP,
     KEY idx_fb_garden (garden_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS model_eval_log (
+    id             INT AUTO_INCREMENT PRIMARY KEY,
+    garden_key     VARCHAR(64)  DEFAULT NULL,
+    eval_type      VARCHAR(32)  DEFAULT 'rolling',
+    sample_count   INT          DEFAULT NULL,
+    accuracy       DOUBLE       DEFAULT NULL,
+    macro_f1       DOUBLE       DEFAULT NULL,
+    high_recall    DOUBLE       DEFAULT NULL,
+    confusion_json MEDIUMTEXT,
+    report_json    MEDIUMTEXT,
+    created_at     DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_eval_garden (garden_key),
+    KEY idx_eval_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 """
     conn = connect()
     try:
@@ -503,5 +556,43 @@ def risk_feedback_stats(garden_key: str, kind: str | None = None) -> dict:
                 }
                 for r in cur.fetchall()
             }
+    finally:
+        conn.close()
+
+
+# ----------------------------------------------------------------
+# 模型评估日志（开发者模式回测结果落库）
+# ----------------------------------------------------------------
+def save_eval_log(garden_key: str | None, eval_type: str, sample_count: int | None,
+                  accuracy: float | None, macro_f1: float | None, high_recall: float | None,
+                  confusion_json: str | None = None, report_json: str | None = None) -> None:
+    """保存一次模型回测评估结果。"""
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO model_eval_log "
+                "(garden_key,eval_type,sample_count,accuracy,macro_f1,high_recall,confusion_json,report_json) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                (garden_key, eval_type, sample_count, accuracy, macro_f1, high_recall,
+                 confusion_json, report_json),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def eval_log_history(limit: int = 50) -> list[dict]:
+    """按时间倒序返回历次模型评估记录。"""
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id,garden_key,eval_type,sample_count,accuracy,macro_f1,high_recall,"
+                "confusion_json,report_json,created_at FROM model_eval_log "
+                "ORDER BY created_at DESC LIMIT %s",
+                (limit,),
+            )
+            return [dict(r) for r in cur.fetchall()]
     finally:
         conn.close()

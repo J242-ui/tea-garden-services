@@ -6,7 +6,6 @@ import streamlit as st
 from src import ui
 from src.risk import build_weather_snapshot
 
-st.set_page_config(page_title="智能问答", page_icon="🌱", layout="wide")
 ui.inject_css()
 garden = ui.select_garden()
 data = ui.get_weather(garden)

@@ -69,6 +69,7 @@ def forecast(garden_key: str, horizon: int = 3) -> dict | None:
         try:
             ys = [(str(r["obs_date"]), max(0.0, risk._num(r.get(field)))) for r in rows]
             df = pd.DataFrame(ys, columns=["ds", "y"])
+            df["ds"] = pd.to_datetime(df["ds"])  # StatsForecast 需要 datetime 类型，避免字符串解析失败
             df["unique_id"] = "g"
             sf = StatsForecast(
                 models=[AutoARIMA(season_length=7)],

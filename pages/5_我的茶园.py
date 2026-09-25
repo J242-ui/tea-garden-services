@@ -6,7 +6,6 @@ import streamlit as st
 from src import db, ui
 from src.auth_ui import current_user, render_auth_ui
 
-st.set_page_config(page_title="我的茶园", page_icon="🌱", layout="wide")
 ui.inject_css()
 
 render_auth_ui()

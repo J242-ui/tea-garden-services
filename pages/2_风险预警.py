@@ -1,4 +1,4 @@
-﻿"""风险预警页：分级预警机制 + 气象灾害/病虫害研判 + 大模型复核。
+"""风险预警页：分级预警机制 + 气象灾害/病虫害研判 + 大模型复核。
 
 预警分级：
   紧急处置(红) <- 高风险；提前预防(橙) <- 中风险；持续观察(黄) <- 低风险
@@ -13,7 +13,6 @@ from src.auth_ui import current_user
 from datetime import date as _date
 from src.risk import TIER_META, TIER_ORDER, build_weather_snapshot, overall_tier, tier_action, tier_of
 
-st.set_page_config(page_title="风险预警", page_icon="🚨", layout="wide")
 ui.inject_css()
 garden = ui.select_garden()
 data = ui.get_weather(garden)
@@ -109,7 +108,7 @@ if _user_r and garden.get("db_id") is not None:
         _mid = sum(1 for i in overall["items"] if i.get("level") == "medium")
         db.save_analysis(
             _user_r["id"], garden.get("db_id"), str(garden.get("name", "")),
-            "risk", _date.today(), str(tier),
+            "risk", _date.today(), overall["overall_level"],
             "整园档位：" + str(_lv) + f"（{len(overall['items'])} 项风险：高{_hi} · 中{_mid}）",
             "以上为该茶园当日风险研判快照。",
             overall["items"],
@@ -177,7 +176,7 @@ with tab_llm:
     with st.expander("查看本次研判输入的气象快照", expanded=False):
         st.code(snapshot, language="text")
 
-    if st.button("调用大模型进行综合研判", use_container_width=True, type="primary"):
+    if st.button("调用大模型进行综合研判", width="stretch", type="primary"):
         from src.llm import QianfanClient
         try:
             with st.spinner("伏羲/文心大模型研判中，请稍候…"):
@@ -203,9 +202,12 @@ with st.expander("📋 风险预警历史记录（按天存档）"):
         _pages = max(1, -(-_total // _per))
         st.caption(f"共 {_total} 天 存档 · 第 {_page}/{_pages} 页（日期倒序）")
         for _r in _rows:
-            _lvl = str(_r.get("overall_level") or "observe")
-            _col = TIER_META.get(_lvl, {}).get("color", "#888")
-            _lbl = TIER_META.get(_lvl, {}).get("label", _lvl)
+            _lvl = str(_r.get("overall_level") or "low")
+            # 兼容历史旧数据：早期曾把档位(act/prevent/observe)存入该字段
+            if _lvl in TIER_META:
+                _lvl = {"act": "high", "prevent": "medium", "observe": "low"}[_lvl]
+            _col = ui.LEVEL_COLOR.get(_lvl, "#888")
+            _lbl = ui.LEVEL_CN.get(_lvl, _lvl)
             st.markdown(f"<span style='color:{_col};font-weight:700'>{_lbl}</span> · "
                         f"<b>{_r['scoped_date']}</b> · {_r.get('title') or ''}", unsafe_allow_html=True)
             for _x in (_r.get("_items") or []):

@@ -31,6 +31,11 @@ def is_demo_mode() -> bool:
     return _env_bool("DEMO_MODE")
 
 
+def is_dev_mode() -> bool:
+    """开发者模式开关：开启后显示「开发者控制台」页面。"""
+    return _env_bool("DEV_MODE", False)
+
+
 def load_gardens() -> list[dict]:
     """从 data/tea_gardens.json 读取茶园配置。"""
     path = DATA_DIR / "tea_gardens.json"

@@ -51,9 +51,19 @@ def ensure_data(garden: dict) -> int:
 
 
 def archive_today(garden: dict, data: dict) -> None:
-    """把和风今日返回的 daily 预报归档进历史表（供后续时序/训练用）。"""
+    """把和风今日返回的 daily 预报归档进历史表（供后续时序/训练用）。
+
+    每天每个茶园只归档一次：若 weather_history 已有今天记录则跳过，
+    避免页面每次渲染都重复 UPSERT（降低写库与数据冗余）。
+    """
     try:
         daily = data.get("daily", {}).get("daily", [])
+        if not daily:
+            return
+        # 今日已归档则跳过
+        recent = db.weather_history_series(garden["key"], days=1)
+        if recent and str(recent[0]["obs_date"]) == date.today().isoformat():
+            return
         db.archive_weather(garden["key"], daily)
     except Exception:  # noqa: BLE001
         pass

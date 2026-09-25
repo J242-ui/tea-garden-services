@@ -7,7 +7,6 @@ import streamlit as st
 
 from src import ui
 
-st.set_page_config(page_title="气象监测", page_icon="🌡", layout="wide")
 ui.inject_css()
 garden = ui.select_garden()
 data = ui.get_weather(garden)
@@ -60,7 +59,7 @@ df = pd.DataFrame([
     }
     for d in daily
 ])
-st.dataframe(df, use_container_width=True, hide_index=True)
+st.dataframe(df, width="stretch", hide_index=True)
 
 fig = go.Figure()
 fig.add_trace(go.Scatter(
@@ -82,7 +81,7 @@ fig.update_layout(
     yaxis2=dict(title="降水(mm)", overlaying="y", side="right", showgrid=False),
     hovermode="x unified",
 )
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width="stretch")
 
 # ---- 生活指数 ----
 st.subheader("🧭 生活指数")

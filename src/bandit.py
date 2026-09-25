@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import random
+
 import numpy as np
 
 from . import risk
@@ -47,18 +49,18 @@ class LinUCB:
         """按 context 返回最优处置动作。context 长度需固定（=训练时 dim）。"""
         x = np.asarray(context, dtype=float)
         self._init_dim(x.shape[0])
+        # 冷启动：未试过的 arm 随机探索，避免固定按顺序逐个曝光
+        untried = [a for a in self.arms if self._counts[a] == 0]
+        if untried:
+            return random.choice(untried)
         scores = {}
         for a in self.arms:
             A = self._A[a]
             b = self._b[a]
             theta = np.linalg.solve(A, b)
             mean = float(theta @ x)
-            # 未试过的 arm：探索项给一个大的常数，保证每臂至少曝光一次
-            if self._counts[a] == 0:
-                scores[a] = mean + 1e6
-            else:
-                conf = self.alpha * float(np.sqrt(x @ np.linalg.solve(A, x)))
-                scores[a] = mean + conf
+            conf = self.alpha * float(np.sqrt(x @ np.linalg.solve(A, x)))
+            scores[a] = mean + conf
         return max(scores, key=scores.get)
 
     def update(self, arm: str, context: list[float], reward: float) -> None:

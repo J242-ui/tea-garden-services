@@ -60,7 +60,6 @@ def select_garden() -> dict:
     if not gardens:
         st.sidebar.info("还没有茶园。登录后可到「我的茶园」添加。")
         st.stop()
-    names = [g["name"] for g in gardens]
     current = st.session_state.get("garden_id")
     idx = 0
     for i, g in enumerate(gardens):
@@ -71,10 +70,15 @@ def select_garden() -> dict:
     with st.sidebar:
         _auth_ui()
         st.markdown("### 🍵 茶园选择")
-        selected = st.selectbox("选择茶园", names, index=idx, label_visibility="collapsed")
-        sel = gardens[names.index(selected)]
+        # 用唯一 key 作为选项值，format_func 仅负责展示名称，避免同名茶园被 names.index 选中错对象
+        keys = [g["key"] for g in gardens]
+        selected_key = st.selectbox(
+            "选择茶园", keys, index=idx, label_visibility="collapsed",
+            format_func=lambda k: next((g["name"] for g in gardens if g["key"] == k), k),
+        )
+        sel = next((g for g in gardens if g["key"] == selected_key), gardens[0])
         st.caption(sel.get("location") or "")
-        if st.button("🔄 刷新数据", use_container_width=True):
+        if st.button("🔄 刷新数据", width="stretch"):
             st.cache_data.clear()
             st.rerun()
         st.divider()

@@ -13,7 +13,6 @@ from src.push import (
     CAT_CN, build_routine_cards, summarize, today_range_text,
 )
 
-st.set_page_config(page_title="农事建议", page_icon="🌾", layout="wide")
 ui.inject_css()
 garden = ui.select_garden()
 data = ui.get_weather(garden)

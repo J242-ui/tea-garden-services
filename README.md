@@ -87,21 +87,27 @@ cp env.example .env
 | `QIANFAN_API_KEY` | 百度智能云千帆 API Key，[申请地址](https://console.bce.baidu.com/qianfan/ais/console/onlineService) |
 | `QIANFAN_MODEL` | 大模型名称，默认 `ernie-4.0-8k`；使用伏羲气象大模型时改为对应 model |
 | `DEMO_MODE` | `true` 时使用内置演示数据，无需真实 Key |
-、
-|本地配置|
+| `DEV_MODE` | `true` 时侧边栏显示「开发者控制台」（模型状态 / 一键回测 / 手动重训） |
+
+**本地配置（开发）：**
+
+| 变量 | 说明 |
+| --- | --- |
 | `DB_HOST` | MySQL 主机，默认 `127.0.0.1` |
 | `DB_PORT` | MySQL 端口，默认 `3306` |
 | `DB_USER` | MySQL 用户名，默认 `root` |
 | `DB_PASSWORD` | MySQL 密码 |
 | `DB_NAME` | MySQL 数据库名，默认 `tea_garden` |
-、
-|若需要接云服务器|
 
-| `DB_HOST`|云服务器IP或域名|
-| `DB_PORT`|默认`3306`|
-|`DB_USER`|数据库账号，不建议用` root`|
-| `DB_PASSWORD`|密码|
-|` DB_NAME|`tea_garden``|
+**若需要接云服务器：**
+
+| 变量 | 说明 |
+| --- | --- |
+| `DB_HOST` | 云服务器 IP 或域名 |
+| `DB_PORT` | 默认 `3306` |
+| `DB_USER` | 数据库账号，不建议用 `root` |
+| `DB_PASSWORD` | 密码 |
+| `DB_NAME` | `tea_garden` |
 
 
 > **数据库初始化**：应用启动时自动建表（users / gardens / push_log）。若数据库不存在，请先手动创建：
